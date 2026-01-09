@@ -7,15 +7,22 @@
 extern std::queue<std::shared_ptr<interrupt_flag>> interrupt_flags_queue_task; 
 extern thread_pool work_thread_task;
 
-ZenityDialog dialog;               // 适用于ubuntu gnome桌面的图形化对话框, 没有也没关系
+ZenityDialog dialog;               // A graphical dialog box suitable for the Ubuntu Gnome desktop. It doesn't matter if it doesn't exist.
 
-TaskHandler::TaskHandler(ProtocolParser& protocol) : protocol_(protocol), keyThreadStopFlag_(false) {}
+TaskHandler::TaskHandler(ProtocolParser& protocol) : protocol_(protocol), keyThreadStopFlag_(false) {
 
-// TODO: 建议将每个测试项单独成一个类，方便维护和扩展
-// TODO: 读取某个json键值，请先判断是否存在
-// TODO: 使用 try catch 捕获异常，防止程序崩溃。  若发送过来的json格式不对，又没有捕获异常，程序会崩溃退出
+}
+
+void TaskHandler::stop_all_tasks() {
+    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "Stopping all ongoing test tasks...");
+    while(!interrupt_flags_queue_task.empty()) {
+        std::shared_ptr<interrupt_flag> flag = interrupt_flags_queue_task.front();
+        flag->request_stop();
+        interrupt_flags_queue_task.pop();
+    }
+}
+
 void TaskHandler::processTask(const Task& task, std::unique_ptr<RkGenericBoard>& Board) {
-    // std::cout << "处理任务: 类型=" << task.data["type"].asString() << ", 子命令=" << task.subCommand << std::endl;
     switch (task.subCommand) {
         case CMD_HANDSHAKE:                         
             log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "CMD_HANDSHAKE : 0x01");
@@ -23,21 +30,13 @@ void TaskHandler::processTask(const Task& task, std::unique_ptr<RkGenericBoard>&
             break;
         case CMD_BEGIN_TEST:                        
             log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "CMD_BEGIN_TEST : 0x02");
-            while(!interrupt_flags_queue_task.empty()) {
-                std::shared_ptr<interrupt_flag> flag = interrupt_flags_queue_task.front();
-                flag->request_stop();
-                interrupt_flags_queue_task.pop();
-            }
+            stop_all_tasks();
             handleBeginTest(task);
             break;
 
         case CMD_OVER_TEST:                         
             log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "CMD_OVER_TEST : 0x03");
-            while(!interrupt_flags_queue_task.empty()) {
-                std::shared_ptr<interrupt_flag> flag = interrupt_flags_queue_task.front();
-                flag->request_stop();
-                interrupt_flags_queue_task.pop();
-            }
+            stop_all_tasks();
             handleOverTest(task);
             break;
 
@@ -66,95 +65,95 @@ void TaskHandler::processTask(const Task& task, std::unique_ptr<RkGenericBoard>&
             break;
 
         default:
-            log_thread_safe(LOG_LEVEL_WARN, TaskHandlerTag, "未知子命令: 0x%02X", task.subCommand);
+            log_thread_safe(LOG_LEVEL_WARN, TaskHandlerTag, "unknown command: 0x%02X", task.subCommand);
             break;
     }
 }
 
 void TaskHandler::executeTestAndRespond(const Task& task, std::unique_ptr<RkGenericBoard>& Board) {
     switch (task.subCommand) {
-        case CMD_SIGNAL_TOBEMEASURED:                 // 单个待测测试命令：0x05（5）
+        case CMD_SIGNAL_TOBEMEASURED:                 // single to-be-measured command：0x05（5）
             switch(stringToTestItem(task.data["type"].asString())) {
                 case STORAGE:                         // storage
-                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "执行存储测试");
+                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "execute storage test");
                     storage_test(task, Board);
                 break;
 
-                case SWITCHS:                         // storage
-                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "执行按键测试");
+                case SWITCHS:                         // switchs
+                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "execute switchs test");
                     switchs_test(task, Board);
                 break;
 
                 case SERIAL:                          // serial
-                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "执行串口测试");
+                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "execute serial test");
                     serial_test(task, Board);
                 break;
 
                 case RTC:                             // rtc
-                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "执行RTC测试");
+                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "execute rtc test");
                     rtc_test(task, Board);
                 break;
 
                 case BLUETOOTH:                      // bluetooth
-                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "执行蓝牙测试");
+                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "execute bluetooth test");
                     bluetooth_test(task, Board);
                 break;
 
                 case WIFI:                           // wifi
-                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "执行WiFi测试");
+                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "execute wifi test");
                     wifi_test(task, Board);
                 break;
 
                 case CAMERA:                         // camera
-                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "执行相机测试");
+                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "execute camera test");
                     camera_test(task, Board);
                 break;
 
                 case BASE:                          // base_info
-                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "执行基础信息测试");
+                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "execute base info test");
                     baseinfo_test(task, Board);
                 break;
 
                 case MICROPHONE:                    // microphone
-                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "执行麦克风测试");
+                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "execute microphone test");
                     microphone_test(task, Board);
                 break;
 
                 case COMMON:                            // common
-                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "执行通用测试");
+                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "execute common test");
                     common_test(task, Board);
                 break;
             }
         break;
 
-        case CMD_SIGNAL_EXEC:                         // 单个执行命令：0x0D（13）
+        case CMD_SIGNAL_EXEC:                         // single exec command：0x0D（13）
             switch(task.data["order"].asInt()) {
                 case SIGNAL_EXEC_ORDER_LN:            // ln : 0x02(2)
-                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "执行LN测试");
+                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "execute LN test");
                     ln_test(task, Board);
                 break;
 
                 case SIGNAL_EXEC_ORDER_GPIO:          // gpio : 0x04(4)
-                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "执行GPIO测试");
+                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "execute GPIO test");
                     gpio_test(task, Board);
                 break;
 
                 case SIGNAL_EXEC_ORDER_MANUAL:           // manual : 0x05(5)
-                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "执行手动测试");
+                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "execute MANUAL test");
                     manual_test(task, Board);
                 break;
             }
         break;
 
-        case CMD_SIGNAL_TOBEMEASURED_COMBINE:         // 单个待测组合命令：0x0F（15）
+        case CMD_SIGNAL_TOBEMEASURED_COMBINE:         // single to-be-measured combine command：0x0F（15）
             switch(stringToTestItem(task.data["type"].asString())) {
                 case NET:                              // net
-                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "执行net测试");          
+                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "execute net test");          
                     net_test(task, Board);
                 break;
 
                 case TYPEC:                            // typec
-                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "执行typec测试");
+                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "execute typec test");
                     typec_test(task, Board);
                 break;
             }
@@ -172,35 +171,34 @@ void TaskHandler::switchs_test(const Task& task, std::unique_ptr<RkGenericBoard>
     response["result"] = "true";        
 
     std::map<int, std::string> keyMap;
-    for (Json::Value& item : itemList) {                 // boot_11   power_12 固定格式分割  boot 键值名称，11 键值
-        if (item["enable"].asBool() == false) {         // 未启用的按键，跳过检测
+    for (Json::Value& item : itemList) {                            // boot_11  power_12  Fixed format separation  Boot key-value name, 11 key-value
+        if (item["enable"].asBool() == false) {                     // keys that are not enabled in the test items will be skipped during the detection.
             item["testResult"] = "SKIP";
             continue;
         }
-        size_t underscorePos = item["type"].asString().find('_');   // 找到下划线位置
-        std::string keyName = item["type"].asString().substr(0, underscorePos);  // 截取按键名称
-        int keyCode = std::stoi(item["type"].asString().substr(underscorePos + 1));  // 截取按键代码并转换为整数
-        keyMap[keyCode] = keyName;   // 存入待测按键映射表
+        size_t underscorePos = item["type"].asString().find('_');                    // find out where is the underline is
+        std::string keyName = item["type"].asString().substr(0, underscorePos);      // extract key name
+        int keyCode = std::stoi(item["type"].asString().substr(underscorePos + 1));  // extract key code and convert to int
+        keyMap[keyCode] = keyName;                                                   // store in map for later detection
     }
 
-    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "--> switch test app 自身配置的按键有:");
+    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "-> switch test :  buttons pre-configured within the app are ....");
     for (const auto& pair : Board->Key::keyMap) {
-        log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "--> switch 按键代码: %d, 按键名称: %s", pair.first, pair.second.c_str());
+        log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "-> switch test : button Code: %d, Button Name: %s", pair.first, pair.second.c_str());
     }
 
-    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "--> switch 从配置文件中识别到要检测的按键有:");
+    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "-> switch test :  buttons to be detected are ....");
     for (const auto& pair : keyMap) {
-        log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "--> switch 按键代码: %d, 按键名称: %s", pair.first, pair.second.c_str());
+        log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "-> switch test : button Code: %d, Button Name: %s", pair.first, pair.second.c_str());
         // if (Board->Key::keyMap.count(pair.first) == 0 ) {
-        //     log_thread_safe(LOG_LEVEL_WARN, TaskHandlerTag, "--> switch 警告: 按键代码 %d 在板卡按键映射表中未找到对应名称", pair.first);
+        //     log_thread_safe(LOG_LEVEL_WARN, TaskHandlerTag, "--> switch test Warning: Key Code %d not found in board key mapping table", pair.first);
         // }
     }
 
     int detectCount = keyMap.size();
-    // std::cout << "需要检测的按键数量: " << detectCount << std::endl;
-    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "需要检测的按键数量: %d", detectCount);
+    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "-> switch test : Total number of buttons to be detected: %d", detectCount);
 
-    // TODO: 如果上一次还在运行，想办法停止上一次线程。 或者多开几个taskhander线程，每个任务都有阻塞处理.其它任务也有类似问题。需要优化
+    // switch test version 1.0: using std::thread
     // std::thread keyThread ([this, Board = Board.get(), detectCount, keyMap, responseData]() mutable {
     //     int remainingCount = detectCount;
     //     Json::Value localResponseData = responseData;
@@ -255,64 +253,63 @@ void TaskHandler::switchs_test(const Task& task, std::unique_ptr<RkGenericBoard>
     // });
     // keyThread.detach();
 
+    // switch test version 2.0: using thread pool with interruptible task
     std::shared_ptr<interrupt_flag> keyThreadStopFlag = 
-        work_thread_task.submit_interruptible([this, Board = Board.get(), detectCount, keyMap, responseData](interrupt_flag& flag) mutable {
+        work_thread_task.submit_interruptible([this, Board = Board.get(), detectCount, keyMap, responseData](interrupt_flag& flag) mutable {   
+            // create key test thread, return interrupt_flag ptr
 
-        log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "-> 可中断任务线程");
+            log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "-> switch test :  switch test thread started");
+            int remainingCount = detectCount;                             // remaining keys to test
+            Json::Value localResponseData = responseData;          
+            Json::Value localResponse;
+            localResponse["result"] = "true";
 
-        int remainingCount = detectCount;
-        Json::Value localResponseData = responseData;
-        Json::Value localResponse;
-        localResponse["result"] = "true";
-
-        while(remainingCount > 0 && !flag.is_stop_requested()) {
-            if (Board == nullptr) {
-                log_thread_safe(LOG_LEVEL_ERROR, TaskHandlerTag, "Board指针无效");
-                break;
-            }
-            
-            // int ret = Board->Key::waitForKeyAndIrPress();
-            int ret = Board->Key::waitForKeyPress(10);
-            if (ret == -1) {
-                log_thread_safe(LOG_LEVEL_WARN, TaskHandlerTag, "按键检测配置过程中有错误发生，退出检测");
-                break;
-            } else if (ret == 0) {
-                log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "按键检测等待超时，继续等待按键按下...");
-                continue; // 超时，继续等待
-            }
-
-            if (Board->Key::keyMap.count(ret) && keyMap.count(ret) && Board->Key::keyMap[ret] == keyMap[ret]) {
-                log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "按键: %s 按下，测试通过", Board->Key::keyMap[ret].c_str());
+            while(remainingCount > 0 && !flag.is_stop_requested()) {      // check if need to stop.
+                if (Board == nullptr) {
+                    log_thread_safe(LOG_LEVEL_ERROR, TaskHandlerTag, "-> switch test : Board pointer is invalid, exiting key test thread");
+                    break;
+                }
                 
-                Json::Value& itemList = localResponseData["testCase"]["itemList"];
-                for (Json::Value& item : itemList) {
-                    size_t underscorePos = item["type"].asString().find('_');
-                    std::string keyName = item["type"].asString().substr(0, underscorePos);
-                    int keyCode = std::stoi(item["type"].asString().substr(underscorePos + 1));
-                    if (keyCode == ret) {
-                        item["testResult"] = "OK";
-                        break;
+                int ret = Board->Key::waitForKeyPress(30);
+                if (ret == -1) {
+                    log_thread_safe(LOG_LEVEL_ERROR, TaskHandlerTag, "-> switch test : Key detection config error, exiting key test thread");
+                    break;
+                } else if (ret == 0) {
+                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "-> switch test : Key detection wait timeout, continue to wait for key press...");
+                    continue;
+                }
+
+                if (Board->Key::keyMap.count(ret) && keyMap.count(ret) && Board->Key::keyMap[ret] == keyMap[ret]) {
+                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "-> switch test : Key: %s pressed, test passed", Board->Key::keyMap[ret].c_str());
+                    
+                    Json::Value& itemList = localResponseData["testCase"]["itemList"];
+                    for (Json::Value& item : itemList) {
+                        size_t underscorePos = item["type"].asString().find('_');
+                        std::string keyName = item["type"].asString().substr(0, underscorePos);
+                        int keyCode = std::stoi(item["type"].asString().substr(underscorePos + 1));
+                        if (keyCode == ret) {
+                            item["testResult"] = "OK";
+                            break;
+                        }
+                    }
+
+                    if (keyMap.count(ret)) {                                // remove tested key from to-be-tested key map
+                        keyMap.erase(ret);  
+                        remainingCount--;
+                        log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "-> switch test : Key %s removed from to-be-tested key map", Board->Key::keyMap[ret].c_str());
+                        log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "-> switch test : Remaining number of keys to be tested: %d", remainingCount);
+                    }
+
+                    if (remainingCount == 0) {
+                        log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "-> switch test : All key tests completed, sending test result");
+                        localResponse["cmdType"] = 1;
+                        localResponse["subCommand"] = CMD_SIGNAL_TOBEMEASURED_RES;
+                        localResponse["data"] = localResponseData;
+                        this->protocol_.sendResponse(localResponse);
                     }
                 }
-
-                if (keyMap.count(ret)) {
-                    // 从待测按键映射表中移除已测试按键
-                    keyMap.erase(ret);
-                    remainingCount--;
-                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "按键移除 %s", Board->Key::keyMap[ret].c_str());
-                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "剩余待测按键数量: %d", remainingCount);
-                }
-
-                if (remainingCount == 0) {
-                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "所有按键测试完成，发送响应");
-                    localResponse["cmdType"] = 1;
-                    localResponse["subCommand"] = CMD_SIGNAL_TOBEMEASURED_RES;
-                    localResponse["data"] = localResponseData;
-                    this->protocol_.sendResponse(localResponse);
-                }
             }
-        }
-        log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "按键测试线程退出");
+            log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "-> switch test : switch test thread exited");
     });
     interrupt_flags_queue_task.push(keyThreadStopFlag);
 }
@@ -328,21 +325,19 @@ void TaskHandler::storage_test(const Task& task, std::unique_ptr<RkGenericBoard>
     int i = 0, j = 0, k = 0;
     Board->scan_usb_with_libusb();
 
-    for (const auto& size : Board->usbDiskSizeList) {
-        std::cout << "U盘容量: " << size << " GB" << std::endl;
-    }
+    // for (const auto& size : Board->usbDiskSizeList) {
+    //     log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "udisk size: %.2f GB", size);
+    // }
 
-    for (const auto& info : Board->facilityUsbInfoList3_0) {
-        std::cout << "设备 VID: 0x" << std::hex << info.vid 
-                  << ", PID: 0x" << std::hex << info.pid 
-                  << ", 类型: " << info.usbType << std::dec << std::endl;
-    }
+    // for (const auto& info : Board->facilityUsbInfoList3_0) {
+    //     log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "device VID: 0x%04x, PID: 0x%04x, type: %s", 
+    //         info.vid, info.pid, info.usbType.c_str());
+    // }
 
-    for (const auto& info : Board->facilityUsbInfoList2_0) {
-        std::cout << "设备 VID: 0x" << std::hex << info.vid 
-                  << ", PID: 0x" << std::hex << info.pid 
-                  << ", 类型: " << info.usbType << std::dec << std::endl;
-    }
+    // for (const auto& info : Board->facilityUsbInfoList2_0) {
+    //     log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "device VID: 0x%04x, PID: 0x%04x, type: %s", 
+    //         info.vid, info.pid, info.usbType.c_str());
+    // }
 
 
     Board->lsusbGetVidPidInfo();
@@ -358,10 +353,9 @@ void TaskHandler::storage_test(const Task& task, std::unique_ptr<RkGenericBoard>
 
                 float size = Board->getDdrSize();
                 char buffer[32];
-                snprintf(buffer, sizeof(buffer), "%.2f", size);
+                snprintf(buffer, sizeof(buffer), "%.2f", size);    // reserve two decimal fractions
                 std::string strSize(buffer);
                 item["testValue"] = strSize;
-                // TODO: 保留数据两位小数
                 if (size >= item["min"].asDouble() && size <= item["max"].asDouble()) {
                     item["testResult"] = "OK";
                 } else {
@@ -378,10 +372,9 @@ void TaskHandler::storage_test(const Task& task, std::unique_ptr<RkGenericBoard>
 
                 double size = Board->getEmmcSize();
                 char buffer[32];
-                snprintf(buffer, sizeof(buffer), "%.2f", size);
+                snprintf(buffer, sizeof(buffer), "%.2f", size);  // reserve two decimal fractions
                 std::string strSize(buffer);
                 item["testValue"] = strSize;
-                // TODO: 保留数据两位小数
                 if (size >= item["min"].asDouble() && size <= item["max"].asDouble()) {
                     item["testResult"] = "OK";
                 } else {
@@ -398,14 +391,12 @@ void TaskHandler::storage_test(const Task& task, std::unique_ptr<RkGenericBoard>
 
                 double size = Board->getTfCardSize();
                 char buffer[32];
-                snprintf(buffer, sizeof(buffer), "%.2f", size);
+                snprintf(buffer, sizeof(buffer), "%.2f", size);   // reserve two decimal fractions
                 std::string strSize(buffer);
                 item["testValue"] = strSize;
-                // TODO: 保留数据两位小数
                 if (size >= item["min"].asDouble() && size <= item["max"].asDouble()) {
                     item["testResult"] = "OK";
                 } else {
-
                     item["testResult"] = "NG";
                     response["result"] = "false";
                 }
@@ -422,7 +413,7 @@ void TaskHandler::storage_test(const Task& task, std::unique_ptr<RkGenericBoard>
                     i++;
                     double size = Board->usbDiskSizeList[i];
                     char buffer[32];
-                    snprintf(buffer, sizeof(buffer), "%.2f", size);
+                    snprintf(buffer, sizeof(buffer), "%.2f", size);     // reserve two decimal fractions
                     std::string strSize(buffer);
                     if (size >= item["min"].asDouble() && size <= item["max"].asDouble()) {
                         item["testValue"] = strSize;
@@ -448,7 +439,7 @@ void TaskHandler::storage_test(const Task& task, std::unique_ptr<RkGenericBoard>
 
                 double size = Board->getPcieSize();
                 char buffer[32];
-                snprintf(buffer, sizeof(buffer), "%.2f", size);
+                snprintf(buffer, sizeof(buffer), "%.2f", size);     // reserve two decimal fractions
                 std::string strSize(buffer);
                 if (size >= item["min"].asDouble() && size <= item["max"].asDouble()) {
                     item["testValue"] = strSize;
@@ -466,15 +457,6 @@ void TaskHandler::storage_test(const Task& task, std::unique_ptr<RkGenericBoard>
                     break;
                 }
 
-                // printf("facilityUsbCount3_0=%d, j=%d\n", Board->facilityUsbCount3_0, j);
-                // for (auto & info : Board->facilityUsbInfoList3_0) {
-                //     if (info.vid == std::stoi(item["isVid"].asString()) &&
-                //         info.pid == std::stoi(item["isPid"].asString())) {
-                //             item["testResult"] = "OK";
-                //             break;
-                //     }
-                // }
-
                 for (auto & lsusbInfo : Board->lsusbFacilityUsbInfoList) {
                     if (lsusbInfo.vid == std::stoi(item["isVid"].asString()) &&
                         lsusbInfo.pid == std::stoi(item["isPid"].asString())) {
@@ -482,22 +464,6 @@ void TaskHandler::storage_test(const Task& task, std::unique_ptr<RkGenericBoard>
                             break;
                     }
                 }
-
-                // if (j < Board->facilityUsbCount3_0) {
-                //     j++;
-                //     // item["testValue"]["vid"] = Board->facilityUsbInfoList3_0[j].vid;
-                //     // item["testValue"]["pid"] = Board->facilityUsbInfoList3_0[j].pid;
-                //     // item["testValue"]["usbType"] = Board->facilityUsbInfoList3_0[j].usbType;
-                //     item["testResult"] = "OK";
-                //     break;
-                // } else {
-                //     item["testValue"]["vid"] = 0;
-                //     item["testValue"]["pid"] = 0;
-                //     item["testValue"]["usbType"] = "0.0";
-                //     item["testResult"] = "NG";
-                //     response["result"] = "false";
-                //     break;
-                // }
             } break;
 
             case FACILITYUSB2_0: {
@@ -513,31 +479,6 @@ void TaskHandler::storage_test(const Task& task, std::unique_ptr<RkGenericBoard>
                             break;
                     }
                 }
-
-                // printf("facilityUsbCount2_0=%d, j=%d\n", Board->facilityUsbCount2_0, k);
-                // for (auto & info : Board->facilityUsbInfoList2_0) {
-                //     if (info.vid == std::stoi(item["isVid"].asString()) &&
-                //         info.pid == std::stoi(item["isPid"].asString())) {
-                //             item["testResult"] = "OK";
-                //             break;
-                //     }
-                // }
-
-                // if (k < Board->facilityUsbCount2_0) {
-                //     k++;
-                //     // item["testValue"]["vid"] = Board->facilityUsbInfoList2_0[k].vid;
-                //     // item["testValue"]["pid"] = Board->facilityUsbInfoList2_0[k].pid;
-                //     // item["testValue"]["usbType"] = Board->facilityUsbInfoList2_0[k].usbType;
-                //     item["testResult"] = "OK";
-                //     break;
-                // } else {
-                //     item["testValue"]["vid"] = 0;
-                //     item["testValue"]["pid"] = 0;
-                //     item["testValue"]["usbType"] = "0.0";
-                //     item["testResult"] = "NG";
-                //     response["result"] = "false";
-                //     break;
-                // }
             } break;
 
             default:
@@ -715,13 +656,23 @@ void TaskHandler::serial_test(const Task& task, std::unique_ptr<RkGenericBoard>&
 
             Json::Value& groupList = responseData["testCase"]["groupList"];
 
+            int serial485Count = 0;
+            std::vector<std::string> deviceList;
+            std::vector<bool> sendResult;
+            std::vector<bool> recvResult;
+
+            int serialCanCount = 0;
+            std::vector<std::string> canDeviceList;
+            std::vector<bool> canSendResult;
+            std::vector<bool> canRecvResult;
+
             for (Json::ArrayIndex i = 0; i < groupList.size(); ++i) {
                 Json::Value& group = groupList[i];
-                
-                // 获取 itemList 数组
+
+                // get itemList array
                 Json::Value& itemList = group["itemList"];
                 
-                // 遍历每个 item
+                // iterate through each item
                 for (Json::ArrayIndex j = 0; j < itemList.size(); ++j) {
                     Json::Value& item = itemList[j];
                     if (item["enable"].asBool() == false) {
@@ -741,14 +692,14 @@ void TaskHandler::serial_test(const Task& task, std::unique_ptr<RkGenericBoard>&
                                 item["testResult"] = "NG";
                                 response["result"] = "false";
                             }
-                        } else if (strstr(serialName.c_str(), "485") != NULL) {
-                            int fd = Board->open_serial_device(serialPath.c_str());
+                        } else if (strstr(serialName.c_str(), "485") != NULL && item["mode"].asInt() == 1) {
+                            int fd = Board->openSerial(serialPath.c_str(), 115200);
                             if (fd < 0) {
                                 log_thread_safe(LOG_LEVEL_ERROR, TaskHandlerTag, "open 485 device %s failed", serialPath.c_str());
                                 item["testResult"] = "NG";
                                 response["result"] = "false";
                             } else {
-                                bool ret = Board->serial485_test(fd, 10);
+                                bool ret = Board->serial_485_test(fd, 10);
                                 if (ret) {
                                     log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "485 device %s test success", serialPath.c_str());
                                     item["testResult"] = "OK";
@@ -759,7 +710,11 @@ void TaskHandler::serial_test(const Task& task, std::unique_ptr<RkGenericBoard>&
                                 }
                                 close(fd);
                             }
-                        } else if (strstr(serialName.c_str(), "CAN") != NULL || strstr(serialName.c_str(), "can") != NULL) {
+                        } else if (strstr(serialName.c_str(), "485") != NULL && item["mode"].asInt() == 0) {
+                            // collect 485 devices only, do nothing
+                            deviceList.push_back(serialPath);
+                            serial485Count++;
+                        } else if (strstr(serialName.c_str(), "CAN") != NULL || strstr(serialName.c_str(), "can") != NULL && item["mode"].asInt() == 1) {
                             int can_fd = Board->open_can_device(serialPath.c_str());
                             if (can_fd < 0) {
                                 log_thread_safe(LOG_LEVEL_ERROR, TaskHandlerTag, "open can device %s failed", serialPath.c_str());
@@ -776,6 +731,75 @@ void TaskHandler::serial_test(const Task& task, std::unique_ptr<RkGenericBoard>&
                                     response["result"] = "false";
                                 }
                                 close(can_fd);
+                            }
+                        } else if (strstr(serialName.c_str(), "CAN") != NULL || strstr(serialName.c_str(), "can") != NULL && item["mode"].asInt() == 0) {
+                            // collect can devices only, do nothing
+                            canDeviceList.push_back(serialPath);
+                            serialCanCount++;
+                        }
+                    }
+                }
+            }
+
+            // test 485 and CAN devices collected before
+            if (!deviceList.empty() || !canDeviceList.empty()) {
+                Board->serial485TestRetry(deviceList, sendResult, recvResult);
+                for (size_t i = 0; i < deviceList.size(); ++i) {
+                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "485 device: %s, send: %s, recv: %s",
+                        deviceList[i].c_str(),
+                        sendResult[i] ? "success" : "failed",
+                        recvResult[i] ? "success" : "failed");
+                }
+
+                Board->serialCanTestRetry(canDeviceList, canSendResult, canRecvResult);
+                for (size_t i = 0; i < canDeviceList.size(); ++i) {
+                    log_thread_safe(LOG_LEVEL_INFO, TaskHandlerTag, "CAN device: %s, send: %s, recv: %s",
+                        canDeviceList[i].c_str(),
+                        canSendResult[i] ? "success" : "failed",
+                        canRecvResult[i] ? "success" : "failed");
+                }
+
+                // set test result for 485 and CAN devices
+                int index = 0;
+                int canIndex = 0;
+                for (Json::ArrayIndex i = 0; i < groupList.size(); ++i) {
+                    Json::Value& group = groupList[i];
+                    Json::Value& itemList = group["itemList"];
+
+                    for (Json::ArrayIndex j = 0; j < itemList.size(); ++j) {
+                        Json::Value& item = itemList[j];
+                        if (item["enable"].asBool() == false) {
+                            continue;
+                        }
+                        if (item.isMember("serialPath") && item["serialPath"].isString()) {
+                            std::string serialName = item["serialName"].asString();
+                            
+                            if (strstr(serialName.c_str(), "485") != NULL && item["mode"].asInt() == 0) {
+                                if (index < (int)deviceList.size()) {
+                                    if (sendResult[index] && recvResult[index]) {
+                                        item["testResult"] = "OK";
+                                    } else {
+                                        item["testResult"] = "NG";
+                                        response["result"] = "false";
+                                    }
+                                    index++;
+                                } else {
+                                    item["testResult"] = "NG";
+                                    response["result"] = "false";
+                                }
+                            } else if (strstr(serialName.c_str(), "CAN") != NULL || strstr(serialName.c_str(), "can") != NULL && item["mode"].asInt() == 0) {
+                                if (canIndex < (int)canDeviceList.size()) {
+                                    if (canSendResult[canIndex] && canRecvResult[canIndex]) {
+                                        item["testResult"] = "OK";
+                                    } else {
+                                        item["testResult"] = "NG";
+                                        response["result"] = "false";
+                                    }
+                                    canIndex++;
+                                } else {
+                                    item["testResult"] = "NG";
+                                    response["result"] = "false";
+                                }
                             }
                         }
                     }
@@ -920,7 +944,7 @@ void TaskHandler::ln_test(const Task& task, std::unique_ptr<RkGenericBoard>& Boa
     protocol_.sendResponse(response);
 }
 
-void TaskHandler::gpio_test(const Task& task, std::unique_ptr<RkGenericBoard>& Board) {     // 执行速度较快且不
+void TaskHandler::gpio_test(const Task& task, std::unique_ptr<RkGenericBoard>& Board) {    // gpio task execute quickly, no need to add in thread pool
     Json::Value response;
     Json::Value responseData;
     responseData = task.data;
@@ -934,7 +958,7 @@ void TaskHandler::gpio_test(const Task& task, std::unique_ptr<RkGenericBoard>& B
         direction = responseData["testOrder"]["gpioType"].asInt();
       
     } else {
-        direction = 0;                                  // 默认设置为输出
+        direction = 0;                               // default set output
     }
 
     LogInfo("TaskHandlerGPIO",  "direction: %d", direction);
@@ -979,7 +1003,7 @@ void TaskHandler::gpio_test(const Task& task, std::unique_ptr<RkGenericBoard>& B
     }
 }
 
-void TaskHandler::manual_test(const Task& task, std::unique_ptr<RkGenericBoard>& Board) {
+void TaskHandler::manual_test(const Task& task, std::unique_ptr<RkGenericBoard>& Board) {   // manual task execute quickly, no need to add in thread pool
     Json::Value response;
     Json::Value responseData;
     responseData = task.data;

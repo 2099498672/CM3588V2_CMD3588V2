@@ -104,6 +104,7 @@ public:
     void scan_usb_with_libusb();
 
 
+
     struct lsusbFacilityusbInfo {
         uint16_t vid;
         uint16_t pid;

@@ -73,6 +73,8 @@ public:
     void dpLanes_test(const Task& task, std::unique_ptr<RkGenericBoard>& Board);
     void microphone_test(const Task& task, std::unique_ptr<RkGenericBoard>& Board);
     void common_test(const Task& task, std::unique_ptr<RkGenericBoard>& Board);
+
+    void stop_all_tasks();
     
 private:
     ProtocolParser& protocol_;  // 协议解析器引用

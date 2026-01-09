@@ -1,10 +1,8 @@
 #include "hardware/Storage.h"
 
-// 静态变量用于标记是否已找到size文件
-
-
 Storage::Storage(const char* mmcDeviceSizePath, const char* pcieDeviceSizePath) 
-    : MMC_DEVICE_SIZE_PATH(mmcDeviceSizePath), PCIE_DEVICE_SIZE_PATH(pcieDeviceSizePath), usbDiskSizeList(10), facilityUsbInfoList2_0(10),  facilityUsbInfoList3_0(10), lsusbFacilityUsbInfoList(30){
+    : MMC_DEVICE_SIZE_PATH(mmcDeviceSizePath), PCIE_DEVICE_SIZE_PATH(pcieDeviceSizePath) ,
+    usbDiskSizeList(10), facilityUsbInfoList2_0(10), facilityUsbInfoList3_0(10), lsusbFacilityUsbInfoList(30) {
 
 }
 
@@ -15,60 +13,60 @@ float Storage::getDdrSize() {
         return -1;
     }
 
-    unsigned long long totalKb = info.totalram * info.mem_unit / 1024;   // sysinfo返回的总内存单位是字节，转换为kB
+    unsigned long long totalKb = info.totalram * info.mem_unit / 1024;              // sysinfo returns total memory in bytes, convert to kB
     // unsigned long long totalMb = totalKb / 1024;
-    float totalGb = static_cast<float>(totalKb) / (1024 * 1024);         // 转换为GB并保留两位小数（1GB = 1024*1024 kB）
+    float totalGb = static_cast<float>(totalKb) / (1024 * 1024);                    // convert to GB and keep two decimal places
     float roundedGb = round(totalGb * 100.0f) / 100.0f;
-    LogInfo(STORAGE_TAG, "ddr total size: %llu KB (%.2f GB)", totalKb, roundedGb);
+    log_thread_safe(LOG_LEVEL_INFO, STORAGE_TAG, "ddr total size: %llu KB (%.2f GB)", totalKb, roundedGb);
     return roundedGb;
 }
 
 float Storage::getEmmcSize() {
     FILE* fp = fopen(MMC_DEVICE_SIZE_PATH, "r");
     if (!fp) {
-        LogError(STORAGE_TAG, "can not open : %s", MMC_DEVICE_SIZE_PATH);
+        log_thread_safe(LOG_LEVEL_ERROR, STORAGE_TAG, "can not open : %s", MMC_DEVICE_SIZE_PATH);
         return -1;
     }
 
     unsigned long long sectors;
     if (fscanf(fp, "%llu", &sectors) != 1) {
-        LogError(STORAGE_TAG, "read emmc sectors failed. ");
+        log_thread_safe(LOG_LEVEL_ERROR, STORAGE_TAG, "read emmc sectors failed. ");
         fclose(fp);
         return -1;
     }
     fclose(fp);
 
-    unsigned long long totalBytes = sectors * 512;    // 计算总字节数和KB
-    unsigned long long totalKb = totalBytes / 1024;   // 转换为KB
+    unsigned long long totalBytes = sectors * 512;                                      // calculate total bytes and KB. every sector is 512 bytes
+    unsigned long long totalKb = totalBytes / 1024;                                     // convert to KB
     // unsigned long long totalMb = totalBytes / (1024 * 1024);
     
-    float totalGb = static_cast<float>(totalBytes) / (1024.0f * 1024.0f * 1024.0f);      // 转换为GB并保留两位小数
+    float totalGb = static_cast<float>(totalBytes) / (1024.0f * 1024.0f * 1024.0f);      // convert to GB and keep two decimal places
     float roundedGb = round(totalGb * 100.0f) / 100.0f;
     
-    LogInfo(STORAGE_TAG, "emmc total size: %llu KB (%.2f GB)", totalKb, roundedGb);
+    log_thread_safe(LOG_LEVEL_INFO, STORAGE_TAG, "emmc total size: %llu KB (%.2f GB)", totalKb, roundedGb);
     return roundedGb;
 } 
 
 float Storage::getPcieSize() {
     FILE* fp = fopen(PCIE_DEVICE_SIZE_PATH, "r");
     if (!fp) {
-        LogError(STORAGE_TAG, "can not open : %s", PCIE_DEVICE_SIZE_PATH);
+        log_thread_safe(LOG_LEVEL_ERROR, STORAGE_TAG, "can not open : %s", PCIE_DEVICE_SIZE_PATH);
         return -1;
     }
 
     unsigned long long sectors;
     if (fscanf(fp, "%llu", &sectors) != 1) {
-        LogError(STORAGE_TAG, "read pcie sectors failed. ");
+        log_thread_safe(LOG_LEVEL_ERROR, STORAGE_TAG, "read pcie sectors failed. ");
         fclose(fp);
         return -1;
     }
     fclose(fp);
 
-    unsigned long long totalBytes = sectors * 512;    // 计算总字节数和KB
-    unsigned long long totalKb = totalBytes / 1024;   // 转换为KB
+    unsigned long long totalBytes = sectors * 512;    // convert to bytes
+    unsigned long long totalKb = totalBytes / 1024;   // convert to KB
     // unsigned long long totalMb = totalBytes / (1024 * 1024);
     
-    float totalGb = static_cast<float>(totalBytes) / (1024.0f * 1024.0f * 1024.0f);      // 转换为GB并保留两位小数
+    float totalGb = static_cast<float>(totalBytes) / (1024.0f * 1024.0f * 1024.0f);      // convert to GB and keep two decimal places
     float roundedGb = round(totalGb * 100.0f) / 100.0f;
     
     LogInfo(STORAGE_TAG, "pcie total size: %llu KB (%.2f GB)", totalKb, roundedGb);
@@ -482,7 +480,7 @@ void Storage::search_directory(const char *path) {
                 return;
             }
         } else if (S_ISREG(statbuf.st_mode) && strcmp(entry->d_name, "size") == 0) {
-            printf("Found: %s\n", full_path);
+            // printf("Found: %s\n", full_path);
             int fd = open(full_path, O_RDONLY);
             if (fd < 0) {
                 perror("open size file");
@@ -493,7 +491,9 @@ void Storage::search_directory(const char *path) {
             char size_str[32];
             if (read(fd, size_str, sizeof(size_str)-1) > 0) {
                 unsigned long long size = strtoull(size_str, NULL, 10);
-                printf("容量: %.2f GB\n", (size * 512.0) / (1024.0 * 1024.0 * 1024.0));
+                // printf("容量: %.2f GB\n", (size * 512.0) / (1024.0 * 1024.0 * 1024.0));
+                log_thread_safe(LOG_LEVEL_INFO, STORAGE_TAG, "udisk path: (%d): %s", usbDiskCount, full_path);
+                log_thread_safe(LOG_LEVEL_INFO, STORAGE_TAG, "udisk size: (%d): %.2f GB", usbDiskCount, (size * 512.0) / (1024.0 * 1024.0 * 1024.0));
                 usbDiskSizeList[++usbDiskCount] = (size * 512.0) / (1024.0 * 1024.0 * 1024.0);
                 g_size_found = true; // 标记已找到size文件
             }
@@ -528,19 +528,18 @@ void Storage::scan_usb_with_libusb() {
     
     r = libusb_init(&ctx);
     if (r < 0) {
-        fprintf(stderr, "初始化libusb失败\n");
+        log_thread_safe(LOG_LEVEL_ERROR, STORAGE_TAG, "init libusb failed");
         return;
     }
     
     cnt = libusb_get_device_list(ctx, &devs);
     if (cnt < 0) {
-        fprintf(stderr, "获取设备列表失败\n");
+        log_thread_safe(LOG_LEVEL_ERROR, STORAGE_TAG, "get device list failed");
         libusb_exit(ctx);
         return;
     }
     
-    printf("=== USB设备详细扫描 ===\n");
-    printf("找到 %ld 个USB设备\n\n", cnt);
+    log_thread_safe(LOG_LEVEL_INFO, STORAGE_TAG, "found %ld usb devices", cnt);
     
     for (i = 0; i < cnt; i++) {
         libusb_device* dev = devs[i];
@@ -612,7 +611,7 @@ void Storage::scan_usb_with_libusb() {
         
         // 如果是存储设备，查找设备节点和挂载路径并显示容量
         if (is_mass_storage_device_by_interface(dev)) {
-            printf("  [存储设备] 可安全移除\n");
+            // printf("  [存储设备] 可安全移除\n");
 
             DIR* dir = opendir("/sys/bus/usb/devices/");
             if (!dir) {
@@ -651,13 +650,15 @@ void Storage::scan_usb_with_libusb() {
                 uint16_t found_vid = (uint16_t)strtoul(vid_str, NULL, 16);
                 uint16_t found_pid = (uint16_t)strtoul(pid_str, NULL, 16);
                 if (found_vid == desc.idVendor && found_pid == desc.idProduct) {
-                    printf("找到匹配的USB设备: %s\n", entry->d_name);
-                    printf("VID: 0X%x, PID: 0X%0x\n", found_vid, found_pid);
+                    // printf("找到匹配的USB设备: %s\n", entry->d_name);
+                    // printf("VID: 0X%x, PID: 0X%0x\n", found_vid, found_pid);
                     // entry->d_name 目录下递归查找size文件，并计算容量
                     char usb_device_path[PATH_MAX];
                     snprintf(usb_device_path, sizeof(usb_device_path), 
                             "/sys/bus/usb/devices/%s", entry->d_name);
-                    printf("USB设备路径: %s\n", usb_device_path);
+                    // printf("USB设备路径: %s\n", usb_device_path);
+
+
 
                     g_size_found = false; // 重置标志
                     search_directory(usb_device_path);
@@ -668,12 +669,12 @@ void Storage::scan_usb_with_libusb() {
             closedir(dir);
         }
         else if (desc.bDeviceClass == 0x03) {
-            printf("  [输入设备] 键盘/鼠标等\n");
+            // printf("  [输入设备] 键盘/鼠标等\n");
         }
         else if (desc.bDeviceClass == 0x09) {
-            printf("  [集线器] 端口扩展设备\n");
+            // printf("  [集线器] 端口扩展设备\n");
         } else if (desc.bDeviceClass == 0x02 && desc.bDeviceSubClass == 0x02 && desc.bDeviceProtocol == 0x01 && strcmp(reinterpret_cast<const char*>(manufacturer), "WCH") == 0) {
-            printf("发现usb小板\n");
+            // printf("发现usb小板\n");
             FacilityusbInfo info;
             info.vid = desc.idVendor;
             info.pid = desc.idProduct;
@@ -689,10 +690,10 @@ void Storage::scan_usb_with_libusb() {
             }
 
         } else {
-            printf("  [其他设备] \n");
+            // printf("  [其他设备] \n");
         }
         
-        printf("\n");
+        // printf("\n");
     }
     
     libusb_free_device_list(devs, 1);
@@ -709,7 +710,10 @@ bool Storage::lsusbGetVidPidInfo() {
 
 
     FILE* pipe = popen("lsusb", "r");
-    if (!pipe) return false;
+    if (!pipe) {
+        log_thread_safe(LOG_LEVEL_ERROR, STORAGE_TAG, "popen lsusb failed");
+        return false;
+    }
     
     char buffer[512];
     std::regex pattern(R"(ID\s+([0-9a-fA-F]{4}):([0-9a-fA-F]{4}))");
@@ -733,10 +737,11 @@ bool Storage::lsusbGetVidPidInfo() {
 
     // 打印结果以验证
     for (int i = 1; i <= lsusbFacilityUsbCount; i++) {
-        printf("lsusb 设备 %d: VID=0x%04x, PID=0x%04x\n", 
-               i, 
-               lsusbFacilityUsbInfoList[i].vid, 
-               lsusbFacilityUsbInfoList[i].pid);
+        log_thread_safe(LOG_LEVEL_INFO, STORAGE_TAG, 
+            "lsusb 设备 %d: VID=0x%04x, PID=0x%04x", 
+            i, 
+            lsusbFacilityUsbInfoList[i].vid, 
+            lsusbFacilityUsbInfoList[i].pid);
     }
 
     return lsusbFacilityUsbCount > 0;

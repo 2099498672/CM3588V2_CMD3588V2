@@ -38,19 +38,6 @@ int main() {
     }
     log_thread_safe(LOG_LEVEL_INFO, APP_TAG, "创建板卡实例: %s", detected_board_name.c_str());
 
-    int can2_fd = Board->open_can_device("can2");
-    if (can2_fd < 0) {
-        log_thread_safe(LOG_LEVEL_ERROR, APP_TAG, "打开 can2 设备失败");
-    } else {
-        bool ret = Board->can_test(can2_fd, 10);
-        if (ret) {
-            log_thread_safe(LOG_LEVEL_INFO, APP_TAG, "can2 测试成功");
-        } else {
-            log_thread_safe(LOG_LEVEL_ERROR, APP_TAG, "can2 测试失败");
-        }
-    }
-
-
     ProtocolParser protocol(factory.uart);
     TaskQueue taskQueue;
     TaskHandler taskHandler(protocol);

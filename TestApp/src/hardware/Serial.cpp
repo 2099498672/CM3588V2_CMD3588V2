@@ -66,16 +66,6 @@ int Serial::openSerial(const char *device, int baudRate) {
 // 串口自测方法
 bool Serial::serialTest(const char *device, int reCount, int reCountTimeUs, int testCount) {
     bool result = true;
-
-    
-    // 前10%数据用于预热，跳过不测试
-    // 后80%数据用于测试, 最后10%数据跳过不测试
-
-    // // 前10% 界点
-    // int startTestIndex = testCount / 10;
-    // // 后10% 界点
-    // int endTestIndex = testCount - startTestIndex;
-
     const char *testData = "1234567890!@#$%^&*()";
     char buffer[256];
     ssize_t bytesWritten, bytesRead;
